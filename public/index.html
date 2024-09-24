@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Vehicle Tracking with Leaflet.js</title>
+
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="" />
+
+    <!-- Leaflet.js Script -->
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
+
+    <style>
+        body, html {
+            margin: 0;
+            height: 100%;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script>
+        // Set up the Leaflet map with initial location and zoom level
+        const leafletMap = L.map('map').setView([51.505, -0.09], 13);
+
+        // Add OpenStreetMap tiles to the map
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: 'Map data © OpenStreetMap contributors'
+        }).addTo(leafletMap);
+
+        // Custom vehicle marker icon setup
+        const carIcon = L.icon({
+            iconUrl: 'https://img.icons8.com/?size=100&id=111278&format=png&color=000000', // Vehicle icon URL
+            iconSize: [50, 50], 
+            iconAnchor: [25, 25],
+            popupAnchor: [0, -25]
+        });
+
+        // Variables for tracking location updates, path, and map elements
+        let carMarker, locationCircle, routeLine, pathHistory = [], hasZoomed = false;
+        
+        // Geolocation configuration options
+        const geoOptions = {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+        };
+
+        // Monitor geolocation changes
+        navigator.geolocation.watchPosition(onLocationUpdate, onLocationError, geoOptions);
+
+        function onLocationUpdate(position) {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            const accuracyRadius = position.coords.accuracy;
+
+            // Add current position to the path history
+            pathHistory.push([latitude, longitude]);
+
+            // Remove previous marker and circle if they exist
+            if (carMarker) {
+                leafletMap.removeLayer(carMarker);
+                leafletMap.removeLayer(locationCircle);
+            }
+
+            // Create and add a new vehicle marker
+            carMarker = L.marker([latitude, longitude], { icon: carIcon }).addTo(leafletMap);
+
+            // Add accuracy circle around the current location
+            locationCircle = L.circle([latitude, longitude], { radius: accuracyRadius }).addTo(leafletMap);
+
+            // If there's more than one point, draw the route polyline
+            if (pathHistory.length > 1) {
+                if (routeLine) {
+                    leafletMap.removeLayer(routeLine);
+                }
+                routeLine = L.polyline(pathHistory, { color: 'blue', weight: 5 }).addTo(leafletMap);
+            }
+
+            // Zoom to the user's location on the first position update
+            if (!hasZoomed) {
+                leafletMap.fitBounds(locationCircle.getBounds());
+                hasZoomed = true;
+            }
+
+            // Center map view on the new location
+            leafletMap.setView([latitude, longitude]);
+
+            // Send the location data to the server using fetch API
+            const locationData = { latitude, longitude };
+            fetch('/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(locationData)
+            })
+            .then(response => response.json())
+            .then(responseData => {
+                alert('Location successfully submitted: ' + JSON.stringify(responseData));
+            })
+            .catch(err => {
+                console.error('Submission error:', err);
+            });
+        }
+
+        function onLocationError(err) {
+            if (err.code === 1) {
+                alert("Please allow access to your location.");
+            } else {
+                alert("Unable to fetch your location.");
+            }
+        }
+    </script>
+</body>
+</html>
